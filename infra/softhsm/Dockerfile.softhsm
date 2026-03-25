@@ -1,0 +1,21 @@
+FROM ubuntu:22.04
+
+# Cài HSM và Python
+RUN apt-get update && apt-get install -y \
+    softhsm2 opensc libengine-pkcs11-openssl python3 python3-pip \
+    && rm -rf /var/lib/apt/lists/*
+
+# Cài thư viện API
+RUN pip3 install python-pkcs11 fastapi uvicorn pydantic
+
+# Cấu hình Két sắt
+RUN mkdir -p /var/lib/softhsm/tokens/ && \
+    echo "directories.tokendir = /var/lib/softhsm/tokens/" > /etc/softhsm/softhsm2.conf
+
+WORKDIR /app
+COPY init-hsm.sh /usr/local/bin/
+RUN chmod +x /usr/local/bin/init-hsm.sh
+COPY signer_api.py /app/signer_api.py
+
+# Khởi tạo khóa, bật API server ở cổng 8888
+CMD /usr/local/bin/init-hsm.sh && uvicorn signer_api:app --host 0.0.0.0 --port 8888
