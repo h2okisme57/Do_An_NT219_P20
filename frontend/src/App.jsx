@@ -35,7 +35,7 @@ function App() {
 
     try {
       // GỌI THẲNG XUỐNG BACKEND, KHÔNG CẦN HỎI EMAIL NỮA
-      const response = await fetch('http://localhost:5000/api/orders/create', {
+      const response = await fetch('http://localhost:5050/api/orders/create', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',

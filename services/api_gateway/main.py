@@ -6,14 +6,16 @@ from pydantic import BaseModel
 from cryptography.hazmat.primitives.asymmetric import rsa
 from cryptography.hazmat.primitives import serialization
 from fastapi.middleware.cors import CORSMiddleware
+import httpx
 
-ORDER_SERVICE_ADDR = os.getenv("ORDER_SERVICE_URL", "http://127.0.0.1:5001")
+ORDER_SERVICE_ADDR = os.getenv("ORDER_SERVICE_URL", "http://127.0.0.1:5000")
 
 app = FastAPI(title="NT219 Auth & Gateway Service")
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
+    allowed_origins_env = os.getenv("ALLOWED_ORIGINS", "*")
+    allowed_origins = allowed_origins_env.split(",") if allowed_origins_env != "*" else ["*"]
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -95,5 +97,21 @@ async def verify_jwt(request: Request, call_next):
         request.scope['headers'].append((b'x-user-email', decoded['email'].encode()))
     except:
         return Response(content='{"detail": "Token không hợp lệ"}', status_code=401, media_type="application/json")
-
     return await call_next(request)
+
+
+
+@app.api_route("/{path_name:path}", methods=["GET", "POST", "PUT", "DELETE"])
+async def gateway_proxy(request: Request, path_name: str):
+    url = f"{ORDER_SERVICE_ADDR}/{path_name}"
+    headers = dict(request.headers)
+    body = await request.body()
+    async with httpx.AsyncClient() as client:
+        try:
+            response = await client.request(
+                method=request.method, url=url, headers=headers,
+                content=body, params=request.query_params, timeout=20.0
+            )
+            return Response(content=response.content, status_code=response.status_code, headers=dict(response.headers))
+        except Exception as e:
+            raise HTTPException(status_code=502, detail=f"Không thể kết nối tới Order Service: {str(e)}")
