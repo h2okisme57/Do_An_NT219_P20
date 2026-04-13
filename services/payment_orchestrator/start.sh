@@ -7,8 +7,8 @@ if [ ! -d "vendor" ]; then
     echo "Không có vendor! Đang tải Composer..."
     docker run --rm \
         -u "$(id -u):$(id -g)" \
-        -v "$(pwd):/app" \
-        -w /app \
+        -v "/$(pwd):/app" \
+        -w //app \
         composer:latest \
         composer install --ignore-platform-reqs
     echo "Đã tải xong vendor!"

@@ -41,3 +41,6 @@ storage/certs/
 vendor/
 node_modules/
 storage/logs/
+
+services/api_gateway/private.pem
+services/api_gateway/public.pem
