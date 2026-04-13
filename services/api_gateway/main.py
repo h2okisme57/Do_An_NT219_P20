@@ -7,6 +7,8 @@ from cryptography.hazmat.primitives.asymmetric import rsa
 from cryptography.hazmat.primitives import serialization
 from fastapi.middleware.cors import CORSMiddleware
 
+ORDER_SERVICE_ADDR = os.getenv("ORDER_SERVICE_URL", "http://127.0.0.1:5001")
+
 app = FastAPI(title="NT219 Auth & Gateway Service")
 
 app.add_middleware(
@@ -17,24 +19,33 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+# 1. TỰ ĐỘNG KHỞI TẠO KHÓA
 def init_keys():
-    if not os.path.exists("private.pem"):
+    if not os.path.exists("private.pem") or not os.path.exists("public.pem"):
+        print("🔑 Không tìm thấy khóa. Đang khởi tạo cặp khóa RSA 2048-bit mới...")
         private_key = rsa.generate_private_key(public_exponent=65537, key_size=2048)
+        
+        # Lưu Private Key
         with open("private.pem", "wb") as f:
             f.write(private_key.private_bytes(
                 encoding=serialization.Encoding.PEM,
                 format=serialization.PrivateFormat.TraditionalOpenSSL,
                 encryption_algorithm=serialization.NoEncryption()
             ))
+        
+        # Lưu Public Key
         with open("public.pem", "wb") as f:
             f.write(private_key.public_key().public_bytes(
                 encoding=serialization.Encoding.PEM,
                 format=serialization.PublicFormat.SubjectPublicKeyInfo
             ))
+        print("Đã tạo xong private.pem và public.pem!")
 
 init_keys()
-with open("private.pem", "r") as f: PRIVATE_KEY = f.read()
-with open("public.pem", "r") as f: PUBLIC_KEY = f.read()
+
+# Đọc khóa dưới dạng bytes
+with open("private.pem", "rb") as f: PRIVATE_KEY = f.read()
+with open("public.pem", "rb") as f: PUBLIC_KEY = f.read()
 
 class LoginRequest(BaseModel):
     username: str
@@ -42,15 +53,30 @@ class LoginRequest(BaseModel):
 
 @app.post("/api/login")
 def login(data: LoginRequest):
-    print(f"Login Attempt: {data.username}")
+    print(f"➜ Login Attempt: {data.username}")
+    
     if data.username == "admin" and data.password == "123456":
         payload = {
             "user_id": "U123",
             "email": "admin@uit.edu.vn",
-            "exp": datetime.datetime.utcnow() + datetime.timedelta(hours=2)
+            "iat": datetime.datetime.now(datetime.timezone.utc),
+            "exp": datetime.datetime.now(datetime.timezone.utc) + datetime.timedelta(hours=2)
         }
-        token = jwt.encode(payload, PRIVATE_KEY, algorithm="RS256")
-        return {"access_token": token, "token_type": "bearer"}
+        
+        try: 
+            # Thực hiện ký Token
+            token = jwt.encode(payload, PRIVATE_KEY, algorithm="RS256")
+            if isinstance(token, bytes):
+                token = token.decode("utf-8")
+                
+            return {"access_token": token, "token_type": "bearer"}
+            
+        except Exception as e:
+            print(f"❌ LỖI KÝ TOKEN TẠI SERVER: {str(e)}")
+            import traceback
+            traceback.print_exc()
+            raise HTTPException(status_code=500, detail=f"LỖI KÝ TOKEN: {str(e)}")
+        
     raise HTTPException(status_code=401, detail="Tài khoản hoặc mật khẩu không chính xác")
 
 @app.middleware("http")
